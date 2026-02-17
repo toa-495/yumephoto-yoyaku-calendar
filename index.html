@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>予約</title>
+  <style>
+    :root{ --bg:#f6f7fb; --card:#fff; --text:#222; --muted:#666; --line:#e7e7ef; --accent:#2b6cff; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:system-ui,-apple-system,"Segoe UI","Noto Sans JP","Yu Gothic",sans-serif; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:980px; margin:0 auto; padding:20px; }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.04); }
+    h1{ font-size:20px; margin:0 0 8px; }
+    p{ margin:6px 0; color:var(--muted); line-height:1.7; }
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:#fff; color:#333; font-size:13px; }
+    .pill b{ font-weight:600; }
+    .btn{ appearance:none; border:1px solid var(--line); background:#fff; color:#222; padding:10px 12px; border-radius:10px; cursor:pointer; }
+    .btn.primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+    .grid{ display:grid; grid-template-columns: 1fr; gap:12px; margin-top:12px; }
+    @media(min-width:860px){ .grid{ grid-template-columns: 1.2fr .8fr; } }
+    .slots{ display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+    .slot{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px; cursor:pointer; text-align:left; }
+    .slot:hover{ border-color:#cfd5ff; box-shadow:0 6px 16px rgba(0,0,0,.06); }
+    .slot .dt{ font-size:13px; color:var(--muted); }
+    .slot .tm{ font-size:16px; margin-top:4px; font-weight:650; }
+    .slot.selected{ border-color:var(--accent); outline:2px solid rgba(43,108,255,.15); }
+    .small{ font-size:12px; color:var(--muted); }
+    .error{ color:#b00020; }
+    .ok{ color:#0b7a2a; }
+
+    .form label{ display:block; font-size:13px; color:var(--muted); margin-top:10px; }
+    .form input, .form textarea{
+      width:100%; margin-top:6px; padding:10px 12px; border:1px solid var(--line);
+      border-radius:10px; font-size:14px; background:#fff;
+    }
+    .form textarea{ min-height:84px; resize:vertical; }
+    .hr{ height:1px; background:var(--line); margin:12px 0; }
+    .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>予約</h1>
+      <p id="desc">空き枠を読み込み中です。</p>
+      <div class="row" style="margin-top:10px;">
+        <span class="pill"><b>トークン</b><span id="tokenView" class="mono">-</span></span>
+        <span class="pill"><b>対象</b><span id="membersView">-</span></span>
+        <span class="pill"><b>枠</b><span id="durationView">-</span></span>
+        <button class="btn" id="reloadBtn">更新</button>
+      </div>
+      <p class="small">※このページはリンク（トークン）ごとの設定に基づいて候補枠を表示します。</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h2 style="font-size:16px;margin:0;">候補枠</h2>
+          <span class="small" id="slotsCount">-</span>
+        </div>
+        <div class="hr"></div>
+        <div id="status" class="small"></div>
+        <div id="slots" class="slots" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="font-size:16px;margin:0;">予約確定</h2>
+        <p class="small">候補枠をクリックしてから入力してください。</p>
+        <div class="hr"></div>
+
+        <div class="form">
+          <div class="pill" style="width:100%; justify-content:space-between;">
+            <span><b>選択中</b></span>
+            <span id="selectedView" class="mono">未選択</span>
+          </div>
+
+          <label>お名前（必須）</label>
+          <input id="name" placeholder="例：山田 太郎" />
+
+          <label>メール（任意）</label>
+          <input id="email" placeholder="例：taro@example.com" />
+
+          <label>メモ（任意）</label>
+          <textarea id="memo" placeholder="事前に共有したいことがあればどうぞ"></textarea>
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn primary" id="bookBtn" disabled>この枠で予約する</button>
+            <button class="btn" id="clearBtn">選択解除</button>
+          </div>
+
+          <p id="bookResult" class="small"></p>
+        </div>
+      </div>
+    </div>
+
+    <p class="small" style="margin-top:12px;">
+      トラブル時：GASのWebアプリURLが正しいか／Linksにtokenが存在するか／Calendar APIが有効かを確認してください。
+    </p>
+  </div>
+
+<script>
+/**
+ * ★ここだけ必ず設定してください★
+ * GAS の「ウェブアプリ」URL（/exec で終わるやつ）
+ */
+const GAS_WEBAPP_URL = "PASTE_YOUR_GAS_WEBAPP_URL_HERE"; // 例: https://script.google.com/macros/s/XXXX/exec
+
+// -------------------------------
+
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  token: null,
+  members: [],
+  durationMin: null,
+  slots: [],
+  selected: null, // {start,end,startLocal,endLocal}
+};
+
+function getTokenFromUrl() {
+  const u = new URL(location.href);
+  return u.searchParams.get("t");
+}
+
+function setStatus(msg, kind="") {
+  const el = $("status");
+  el.className = "small " + (kind || "");
+  el.textContent = msg;
+}
+
+function fmtMembers(members) {
+  // 数字キーでもそのまま表示。必要ならここで「1=立谷」みたいに変換も可能。
+  return members && members.length ? members.join(",") : "-";
+}
+
+function renderHeader() {
+  $("tokenView").textContent = state.token || "-";
+  $("membersView").textContent = fmtMembers(state.members);
+  $("durationView").textContent = state.durationMin ? `${state.durationMin}分` : "-";
+}
+
+function renderSlots() {
+  const wrap = $("slots");
+  wrap.innerHTML = "";
+
+  $("slotsCount").textContent = state.slots.length ? `${state.slots.length}件` : "0件";
+
+  if (!state.slots.length) {
+    wrap.innerHTML = `<p class="small">候補枠がありません（期間内の空きがない／営業時間外／祝日除外などの可能性）。</p>`;
+    return;
+  }
+
+  for (const s of state.slots) {
+    const btn = document.createElement("button");
+    btn.className = "slot";
+    btn.type = "button";
+    btn.dataset.start = s.start;
+    btn.dataset.end = s.end;
+    btn.innerHTML = `
+      <div class="dt">${escapeHtml(s.startLocal.split(" ")[0])}</div>
+      <div class="tm">${escapeHtml(s.startLocal.split(" ")[1])}〜${escapeHtml(s.endLocal)}</div>
+    `;
+    btn.addEventListener("click", () => {
+      state.selected = s;
+      document.querySelectorAll(".slot").forEach(x => x.classList.remove("selected"));
+      btn.classList.add("selected");
+      $("selectedView").textContent = `${s.startLocal}〜${s.endLocal}`;
+      $("bookBtn").disabled = false;
+      $("bookResult").textContent = "";
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, s => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[s]);
+}
+
+async function postGAS(payload) {
+  const res = await fetch(GAS_WEBAPP_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch(e) {
+    throw new Error("GAS応答がJSONではありません。WebアプリURLやデプロイ設定を確認してください。\n\n" + text.slice(0, 200));
+  }
+  if (!json.ok) throw new Error(json.error || "GASでエラーが発生しました");
+  return json;
+}
+
+async function loadSlots() {
+  if (!state.token) {
+    $("desc").textContent = "URLに ?t=... がありません。予約リンクのトークンを確認してください。";
+    setStatus("トークンが見つかりません。", "error");
+    return;
+  }
+  if (!GAS_WEBAPP_URL || GAS_WEBAPP_URL.includes("PASTE_")) {
+    $("desc").textContent = "GAS WebアプリURLが未設定です。index.htmlの GAS_WEBAPP_URL を設定してください。";
+    setStatus("GAS WebアプリURLが未設定です。", "error");
+    return;
+  }
+
+  setStatus("空き枠を取得しています…");
+  $("desc").textContent = "リンク設定に基づいて、共通の空き枠を表示します。";
+
+  state.selected = null;
+  $("selectedView").textContent = "未選択";
+  $("bookBtn").disabled = true;
+
+  try {
+    const data = await postGAS({ action: "getSlots", token: state.token });
+    state.members = data.members || [];
+    state.durationMin = data.durationMin || null;
+    state.slots = data.slots || [];
+    renderHeader();
+    renderSlots();
+    setStatus("取得しました。候補枠をクリックしてください。", "ok");
+  } catch (err) {
+    setStatus(String(err.message || err), "error");
+  }
+}
+
+async function bookSelected() {
+  const name = $("name").value.trim();
+  if (!state.selected) {
+    $("bookResult").textContent = "候補枠を選択してください。";
+    return;
+  }
+  if (!name) {
+    $("bookResult").textContent = "お名前は必須です。";
+    return;
+  }
+
+  const payload = {
+    action: "book",
+    token: state.token,
+    start: state.selected.start,
+    end: state.selected.end,
+    requesterName: name,
+    requesterEmail: $("email").value.trim(),
+    memo: $("memo").value.trim(),
+  };
+
+  $("bookBtn").disabled = true;
+  $("bookResult").textContent = "予約を確定しています…";
+
+  try {
+    const data = await postGAS(payload);
+    const link = data.htmlLink ? `（<a href="${escapeHtml(data.htmlLink)}" target="_blank" rel="noopener">カレンダーを開く</a>）` : "";
+    $("bookResult").innerHTML = `<span class="ok">予約が確定しました。</span> ${link}`;
+    // 予約後、候補を更新（枠が消える）
+    await loadSlots();
+  } catch (err) {
+    $("bookResult").innerHTML = `<span class="error">${escapeHtml(String(err.message || err))}</span>`;
+    $("bookBtn").disabled = false;
+  }
+}
+
+function clearSelection() {
+  state.selected = null;
+  $("selectedView").textContent = "未選択";
+  $("bookBtn").disabled = true;
+  $("bookResult").textContent = "";
+  document.querySelectorAll(".slot").forEach(x => x.classList.remove("selected"));
+}
+
+$("reloadBtn").addEventListener("click", loadSlots);
+$("bookBtn").addEventListener("click", bookSelected);
+$("clearBtn").addEventListener("click", clearSelection);
+
+(function init(){
+  state.token = getTokenFromUrl();
+  renderHeader();
+  loadSlots();
+})();
+</script>
+</body>
+</html>
