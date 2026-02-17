@@ -22,6 +22,20 @@
     .grid{ display:grid; grid-template-columns: 1fr; gap:12px; margin-top:12px; }
     @media(min-width:860px){ .grid{ grid-template-columns: 1.2fr .8fr; } }
     .slots{ display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+    .dateGroup{ margin-top:14px; }
+.dateTitle{
+  font-size:14px;
+  color:var(--muted);
+  margin:0 0 8px;
+  font-weight:650;
+}
+.dateSlots{
+  display:grid;
+  grid-template-columns: repeat(auto-fill,minmax(160px,1fr));
+  gap:10px;
+}
+.dateGap{ height:6px; }
+
     .slot{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px; cursor:pointer; text-align:left; }
     .slot:hover{ border-color:#cfd5ff; box-shadow:0 6px 16px rgba(0,0,0,.06); }
     .slot .dt{ font-size:13px; color:var(--muted); }
@@ -43,25 +57,20 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="card">
-      <h1>予約</h1>
-      <p id="desc">空き枠を読み込み中です。</p>
-      <div class="row" style="margin-top:10px;">
-        <span class="pill"><b>トークン</b><span id="tokenView" class="mono">-</span></span>
-        <span class="pill"><b>対象</b><span id="membersView">-</span></span>
-        <span class="pill"><b>枠</b><span id="durationView">-</span></span>
-        <button class="btn" id="reloadBtn">更新</button>
-      </div>
-      <p class="small">※このページはリンク（トークン）ごとの設定に基づいて候補枠を表示します。</p>
-    </div>
 
     <div class="grid">
       <div class="card">
         <div class="row" style="justify-content:space-between;">
-          <h2 style="font-size:16px;margin:0;">候補枠</h2>
-          <span class="small" id="slotsCount">-</span>
-        </div>
+  <h2 style="font-size:16px;margin:0;">候補枠</h2>
+
+  <div class="row" style="gap:10px;">
+    <span class="small" id="slotsCount">-</span>
+    <button class="btn" id="reloadBtn">更新</button>
+  </div>
+</div>
+
         <div class="hr"></div>
+        <p id="desc" class="small">リンク設定に基づいて、共通の空き枠を表示します。</p>
         <div id="status" class="small"></div>
         <div id="slots" class="slots" style="margin-top:10px;"></div>
       </div>
@@ -136,13 +145,7 @@ function fmtMembers(members) {
   return members && members.length ? members.join(",") : "-";
 }
 
-function renderHeader() {
-  $("tokenView").textContent = state.token || "-";
-  $("membersView").textContent = fmtMembers(state.members);
-  $("durationView").textContent = state.durationMin ? `${state.durationMin}分` : "-";
-}
-
-function renderSlots() {
+  function renderSlots() {
   const wrap = $("slots");
   wrap.innerHTML = "";
 
@@ -153,27 +156,63 @@ function renderSlots() {
     return;
   }
 
+  // 日付ごとにまとめる（startLocal: "YYYY-MM-DD HH:mm" 前提）
+  const groups = new Map(); // dateStr -> slots[]
   for (const s of state.slots) {
-    const btn = document.createElement("button");
-    btn.className = "slot";
-    btn.type = "button";
-    btn.dataset.start = s.start;
-    btn.dataset.end = s.end;
-    btn.innerHTML = `
-      <div class="dt">${escapeHtml(s.startLocal.split(" ")[0])}</div>
-      <div class="tm">${escapeHtml(s.startLocal.split(" ")[1])}〜${escapeHtml(s.endLocal)}</div>
-    `;
-    btn.addEventListener("click", () => {
-      state.selected = s;
-      document.querySelectorAll(".slot").forEach(x => x.classList.remove("selected"));
-      btn.classList.add("selected");
-      $("selectedView").textContent = `${s.startLocal}〜${s.endLocal}`;
-      $("bookBtn").disabled = false;
-      $("bookResult").textContent = "";
-    });
-    wrap.appendChild(btn);
+    const dateStr = String(s.startLocal).split(" ")[0];
+    if (!groups.has(dateStr)) groups.set(dateStr, []);
+    groups.get(dateStr).push(s);
+  }
+
+  // 日付順に描画
+  for (const [dateStr, daySlots] of groups.entries()) {
+    const section = document.createElement("section");
+    section.className = "dateGroup";
+
+    const title = document.createElement("h3");
+    title.className = "dateTitle";
+    title.textContent = dateStr; // 例: 2026-02-19（日本語表記にしたければここで変換）
+    section.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "dateSlots";
+
+    for (const s of daySlots) {
+      const btn = document.createElement("button");
+      btn.className = "slot";
+      btn.type = "button";
+      btn.dataset.start = s.start;
+      btn.dataset.end = s.end;
+
+      // 日付は見出しで出すので、カード内は時刻だけにする
+      const timePart = String(s.startLocal).split(" ")[1];
+      btn.innerHTML = `
+        <div class="dt">${escapeHtml(dateStr)}</div>
+        <div class="tm">${escapeHtml(timePart)}〜${escapeHtml(s.endLocal)}</div>
+      `;
+
+      btn.addEventListener("click", () => {
+        state.selected = s;
+        document.querySelectorAll(".slot").forEach(x => x.classList.remove("selected"));
+        btn.classList.add("selected");
+        $("selectedView").textContent = `${s.startLocal}〜${s.endLocal}`;
+        $("bookBtn").disabled = false;
+        $("bookResult").textContent = "";
+      });
+
+      grid.appendChild(btn);
+    }
+
+    section.appendChild(grid);
+    wrap.appendChild(section);
+
+    // 次の日付との間に少し隙間
+    const gap = document.createElement("div");
+    gap.className = "dateGap";
+    wrap.appendChild(gap);
   }
 }
+
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({
@@ -220,7 +259,6 @@ async function loadSlots() {
     state.members = data.members || [];
     state.durationMin = data.durationMin || null;
     state.slots = data.slots || [];
-    renderHeader();
     renderSlots();
     setStatus("取得しました。候補枠をクリックしてください。", "ok");
   } catch (err) {
@@ -278,7 +316,6 @@ $("clearBtn").addEventListener("click", clearSelection);
 
 (function init(){
   state.token = getTokenFromUrl();
-  renderHeader();
   loadSlots();
 })();
 </script>
