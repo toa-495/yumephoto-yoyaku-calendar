@@ -99,7 +99,7 @@
 </div>
 
         <div class="hr"></div>
-        <p id="desc" class="small">リンク設定に基づいて、共通の空き枠を表示します。</p>
+        <p id="desc" class="small" style="display:none;"></p>
         <div id="status" class="small"></div>
         <div id="slots" class="slots" style="margin-top:10px;"></div>
       </div>
@@ -283,18 +283,15 @@ async function postGAS(payload) {
 
 async function loadSlots() {
   if (!state.token) {
-    $("desc").textContent = "URLに ?t=... がありません。予約リンクのトークンを確認してください。";
     setStatus("トークンが見つかりません。", "error");
     return;
   }
   if (!GAS_WEBAPP_URL || GAS_WEBAPP_URL.includes("PASTE_")) {
-    $("desc").textContent = "GAS WebアプリURLが未設定です。index.htmlの GAS_WEBAPP_URL を設定してください。";
     setStatus("GAS WebアプリURLが未設定です。", "error");
     return;
   }
 
   setStatus("空き枠を取得しています…");
-  $("desc").textContent = "リンク設定に基づいて、共通の空き枠を表示します。";
 
   state.selected = null;
   $("selectedView").textContent = "未選択";
