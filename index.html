@@ -266,6 +266,7 @@ function formatDateJP(dateStr){
 
 
 async function postGAS(payload) {
+  payload.__ua = navigator.userAgent;
   const res = await fetch(GAS_WEBAPP_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
