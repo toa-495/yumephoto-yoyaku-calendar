@@ -22,19 +22,48 @@
     .grid{ display:grid; grid-template-columns: 1fr; gap:12px; margin-top:12px; }
     @media(min-width:860px){ .grid{ grid-template-columns: 1.2fr .8fr; } }
     .slots{ display:grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
-    .dateGroup{ margin-top:14px; }
-.dateTitle{
+    /* ===== 候補枠：3日=1行(3列) ===== */
+.slots{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap:12px;
+}
+
+/* 1日ぶんのカラム（見出し＋枠リスト） */
+.dayCol{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:12px;
+  padding:12px;
+}
+
+.dayTitle{
   font-size:14px;
   color:var(--muted);
-  margin:0 0 8px;
   font-weight:650;
+  margin:0 0 10px;
 }
-.dateSlots{
-  display:grid;
-  grid-template-columns: repeat(auto-fill,minmax(160px,1fr));
+
+/* その日の枠を縦に積む */
+.daySlots{
+  display:flex;
+  flex-direction:column;
   gap:10px;
 }
-.dateGap{ height:6px; }
+
+/* スマホは1列に落とす（見やすさ優先） */
+@media(max-width: 860px){
+  .slots{ grid-template-columns: 1fr; }
+}
+
+/* ===== 右の予約確定：スクロール追従（PCのみ） ===== */
+@media(min-width: 860px){
+  .sticky{
+    position: sticky;
+    top: 12px;
+    align-self: start;
+  }
+}
 
     .slot{ border:1px solid var(--line); background:#fff; border-radius:12px; padding:10px; cursor:pointer; text-align:left; }
     .slot:hover{ border-color:#cfd5ff; box-shadow:0 6px 16px rgba(0,0,0,.06); }
@@ -75,7 +104,7 @@
         <div id="slots" class="slots" style="margin-top:10px;"></div>
       </div>
 
-      <div class="card">
+      <div class="card sticky">
         <h2 style="font-size:16px;margin:0;">予約確定</h2>
         <p class="small">候補枠をクリックしてから入力してください。</p>
         <div class="hr"></div>
@@ -153,7 +182,7 @@ function fmtMembers(members) {
     return;
   }
 
-  // 日付ごとにまとめる（startLocal: "YYYY-MM-DD HH:mm" 前提）
+  // 日付ごとにグルーピング（startLocal: "YYYY-MM-DD HH:mm" 前提）
   const groups = new Map(); // dateStr -> slots[]
   for (const s of state.slots) {
     const dateStr = String(s.startLocal).split(" ")[0];
@@ -161,18 +190,26 @@ function fmtMembers(members) {
     groups.get(dateStr).push(s);
   }
 
-  // 日付順に描画
-  for (const [dateStr, daySlots] of groups.entries()) {
-    const section = document.createElement("section");
-    section.className = "dateGroup";
+  // 日付昇順（YYYY-MM-DD は文字列ソートでOK）
+  const dates = [...groups.keys()].sort();
+
+  // 1日 = 1カラム。wrap(.slots) は3列グリッドなので、
+  // 3つずつ横に並び、4つ目以降は次の行へ自動で回る。
+  for (const dateStr of dates) {
+    const dayCol = document.createElement("div");
+    dayCol.className = "dayCol";
 
     const title = document.createElement("h3");
-    title.className = "dateTitle";
-    title.textContent = dateStr; // 例: 2026-02-19（日本語表記にしたければここで変換）
-    section.appendChild(title);
+    title.className = "dayTitle";
+    title.textContent = dateStr;
+    dayCol.appendChild(title);
 
-    const grid = document.createElement("div");
-    grid.className = "dateSlots";
+    const list = document.createElement("div");
+    list.className = "daySlots";
+
+    const daySlots = groups.get(dateStr) || [];
+    // 時刻順に整列（念のため）
+    daySlots.sort((a,b) => String(a.startLocal).localeCompare(String(b.startLocal)));
 
     for (const s of daySlots) {
       const btn = document.createElement("button");
@@ -181,12 +218,12 @@ function fmtMembers(members) {
       btn.dataset.start = s.start;
       btn.dataset.end = s.end;
 
-      // 日付は見出しで出すので、カード内は時刻だけにする
       const timePart = String(s.startLocal).split(" ")[1];
       btn.innerHTML = `
-        <div class="dt">${escapeHtml(dateStr)}</div>
-        <div class="tm">${escapeHtml(timePart)}〜${escapeHtml(s.endLocal)}</div>
+        <div class="dt">${escapeHtml(timePart)}〜${escapeHtml(s.endLocal)}</div>
+        <div class="tm" style="display:none;"></div>
       `;
+      // ※既存CSSの .tm を使わないので非表示。見た目は .dt だけで十分。
 
       btn.addEventListener("click", () => {
         state.selected = s;
@@ -197,18 +234,14 @@ function fmtMembers(members) {
         $("bookResult").textContent = "";
       });
 
-      grid.appendChild(btn);
+      list.appendChild(btn);
     }
 
-    section.appendChild(grid);
-    wrap.appendChild(section);
-
-    // 次の日付との間に少し隙間
-    const gap = document.createElement("div");
-    gap.className = "dateGap";
-    wrap.appendChild(gap);
+    dayCol.appendChild(list);
+    wrap.appendChild(dayCol);
   }
 }
+
 
 
 function escapeHtml(str){
