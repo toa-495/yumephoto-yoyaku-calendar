@@ -346,6 +346,7 @@ async function bookSelected() {
     requesterName: name,
     requesterEmail: $("email").value.trim(),
     memo: $("memo").value.trim(),
+    selectedText: `${state.selected.startLocal}〜${state.selected.endLocal}`,
   };
 
   $("bookBtn").disabled = true;
