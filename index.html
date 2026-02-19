@@ -354,8 +354,7 @@ async function bookSelected() {
 
   try {
     const data = await postGAS(payload);
-    const link = data.htmlLink ? `（<a href="${escapeHtml(data.htmlLink)}" target="_blank" rel="noopener">カレンダーを開く</a>）` : "";
-    $("bookResult").innerHTML = `<span class="ok">予約が確定しました。</span> ${link}`;
+    $("bookResult").innerHTML = `<span class="ok">予約が確定しました。</span>`;
     // 予約後、候補を更新（枠が消える）
     await loadSlots();
   } catch (err) {
